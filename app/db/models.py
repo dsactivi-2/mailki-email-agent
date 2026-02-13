@@ -62,6 +62,8 @@ class EmailEvent(Base):
     body_html = Column(Text)
     received_at = Column(DateTime, nullable=False)
     category = Column(String(100))
+    cc = Column(Text, nullable=True)
+    bcc = Column(Text, nullable=True)
     priority = Column(String(20), default="normal")
     is_processed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -81,6 +83,8 @@ class EmailDraft(Base):
     body_text = Column(Text, nullable=False)
     body_html = Column(Text)
     tone = Column(String(50))
+    gmail_draft_id = Column(String(255), nullable=True, index=True)
+    body_hash = Column(String(64), nullable=True)
     status = Column(
         Enum("draft", "pending_approval", "approved", "rejected", "sent",
              name="draft_status"),

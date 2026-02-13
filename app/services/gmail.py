@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import EmailEvent, Mailbox
 
+# Module-level cache for label IDs: {(mailbox_id, label_name): label_id}
+_label_cache: dict[tuple[str, str], str] = {}
+
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
@@ -109,6 +112,8 @@ def fetch_new_emails(db: Session, mailbox: Mailbox, max_results: int = 10) -> li
             recipient=headers.get("to", ""),
             subject=headers.get("subject", ""),
             body_text=body_text,
+            cc=headers.get("cc", ""),
+            bcc=headers.get("bcc", ""),
             received_at=datetime.fromtimestamp(int(msg["internalDate"]) / 1000),
             is_processed=False,
         )
@@ -145,3 +150,71 @@ def send_reply(mailbox_id: str, thread_id: str, to: str, subject: str, body: str
         userId="me", body={"raw": raw, "threadId": thread_id}
     ).execute()
     return sent["id"]
+
+
+def create_gmail_draft(mailbox_id: str, thread_id: str, to: str, subject: str, body: str) -> str:
+    """Create a Gmail draft and return the draft ID."""
+    service = _get_gmail_service(mailbox_id)
+    message = MIMEText(body)
+    message["to"] = to
+    message["subject"] = f"Re: {subject}" if not subject.startswith("Re:") else subject
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    draft = service.users().drafts().create(
+        userId="me",
+        body={"message": {"raw": raw, "threadId": thread_id}},
+    ).execute()
+    return draft["id"]
+
+
+def get_or_create_label(mailbox_id: str, label_name: str) -> str:
+    """Get label ID by name, creating it if it doesn't exist. Uses module-level cache."""
+    cache_key = (mailbox_id, label_name)
+    if cache_key in _label_cache:
+        return _label_cache[cache_key]
+
+    service = _get_gmail_service(mailbox_id)
+    results = service.users().labels().list(userId="me").execute()
+    for label in results.get("labels", []):
+        if label["name"] == label_name:
+            _label_cache[cache_key] = label["id"]
+            return label["id"]
+
+    # Label doesn't exist, create it
+    created = service.users().labels().create(
+        userId="me",
+        body={
+            "name": label_name,
+            "labelListVisibility": "labelShow",
+            "messageListVisibility": "show",
+        },
+    ).execute()
+    _label_cache[cache_key] = created["id"]
+    return created["id"]
+
+
+def set_label(mailbox_id: str, message_id: str, label_id: str) -> None:
+    """Add a label to a Gmail message."""
+    service = _get_gmail_service(mailbox_id)
+    service.users().messages().modify(
+        userId="me", id=message_id, body={"addLabelIds": [label_id]}
+    ).execute()
+
+
+def remove_label(mailbox_id: str, message_id: str, label_id: str) -> None:
+    """Remove a label from a Gmail message."""
+    service = _get_gmail_service(mailbox_id)
+    service.users().messages().modify(
+        userId="me", id=message_id, body={"removeLabelIds": [label_id]}
+    ).execute()
+
+
+def check_thread_has_label(mailbox_id: str, thread_id: str, label_id: str) -> bool:
+    """Check if any message in a thread has a specific label."""
+    service = _get_gmail_service(mailbox_id)
+    thread = service.users().threads().get(
+        userId="me", id=thread_id, format="minimal"
+    ).execute()
+    for msg in thread.get("messages", []):
+        if label_id in msg.get("labelIds", []):
+            return True
+    return False

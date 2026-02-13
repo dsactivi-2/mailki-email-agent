@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import re
 
@@ -36,6 +37,7 @@ def process_new_emails(db: Session) -> list[EmailDraft]:
             email_event_id=event.id,
             subject=event.subject,
             body_text=draft_body,
+            body_hash=_calculate_body_hash(draft_body),
             tone=default_tone.name if default_tone else "default",
             status="pending_approval",
             version=1,
@@ -118,6 +120,36 @@ def _placeholder_reply(event: EmailEvent, signature: str) -> str:
     if signature:
         body += f"\n\n{signature}"
     return body
+
+
+def _calculate_body_hash(body: str) -> str:
+    """Calculate SHA-256 hash of the draft body for tamper detection."""
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def regenerate_draft(db: Session, draft: "EmailDraft", feedback: str) -> "EmailDraft":
+    """Regenerate a draft with reviewer feedback incorporated into the tone prompt."""
+    event = draft.email_event
+
+    default_tone = db.query(KBTone).filter_by(is_default=True).first()
+    default_signature = db.query(KBSignature).filter_by(is_default=True).first()
+    compliance_rules = db.query(KBCompliance).filter_by(is_active=True).all()
+
+    compliance_flags = _check_compliance(event.body_text or "", compliance_rules)
+
+    tone_prompt = default_tone.prompt_template if default_tone else "Antworte professionell und freundlich auf Deutsch."
+    tone_prompt += f"\n\nWICHTIG - Aenderungswuensche des Reviewers:\n{feedback}"
+    signature_text = default_signature.content_text if default_signature else ""
+
+    new_body = _generate_ai_reply(event, tone_prompt, signature_text, compliance_flags)
+
+    draft.body_text = new_body
+    draft.body_hash = _calculate_body_hash(new_body)
+    draft.version += 1
+    draft.status = "pending_approval"
+    db.commit()
+
+    return draft
 
 
 def _check_vip(sender: str, vips: list[KBVip]) -> str | None:

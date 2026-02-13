@@ -1,6 +1,5 @@
 import hashlib
 import hmac
-import json
 import time
 
 import httpx
@@ -10,7 +9,21 @@ from app.db.models import EmailDraft, EmailEvent
 
 
 async def post_draft_for_approval(draft: EmailDraft, event: EmailEvent) -> dict:
-    """Post a draft to #mailki-approvals with Approve/Reject buttons."""
+    """Post a draft via DM to the approver with Approve/Reject/Request Changes buttons."""
+
+    # Build To/CC/BCC display
+    recipients_fields = [
+        {"type": "mrkdwn", "text": f"*An:*\n{event.recipient}"},
+    ]
+    if event.cc:
+        recipients_fields.append({"type": "mrkdwn", "text": f"*CC:*\n{event.cc}"})
+    if event.bcc:
+        recipients_fields.append({"type": "mrkdwn", "text": f"*BCC:*\n{event.bcc}"})
+
+    original_text = event.body_text or "(leer)"
+    if len(original_text) > 300:
+        original_text = original_text[:300] + "..."
+
     blocks = [
         {
             "type": "header",
@@ -25,11 +38,13 @@ async def post_draft_for_approval(draft: EmailDraft, event: EmailEvent) -> dict:
         },
         {
             "type": "section",
+            "fields": recipients_fields,
+        },
+        {
+            "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Original-Nachricht (Auszug):*\n>{event.body_text[:300]}..."
-                if len(event.body_text or "") > 300
-                else f"*Original-Nachricht:*\n>{event.body_text or '(leer)'}",
+                "text": f"*Original-Nachricht:*\n>{original_text}",
             },
         },
         {"type": "divider"},
@@ -37,7 +52,7 @@ async def post_draft_for_approval(draft: EmailDraft, event: EmailEvent) -> dict:
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Entwurf:*\n```{draft.body_text}```",
+                "text": f"*Entwurf (v{draft.version}):*\n```{draft.body_text}```",
             },
         },
         {
@@ -58,16 +73,35 @@ async def post_draft_for_approval(draft: EmailDraft, event: EmailEvent) -> dict:
                     "action_id": "reject_draft",
                     "value": str(draft.id),
                 },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Request Changes"},
+                    "action_id": "request_changes_draft",
+                    "value": str(draft.id),
+                },
             ],
         },
     ]
 
     async with httpx.AsyncClient() as client:
+        # Open DM channel with approver
+        dm_resp = await client.post(
+            "https://slack.com/api/conversations.open",
+            headers={"Authorization": f"Bearer {settings.SLACK_BOT_TOKEN}"},
+            json={"users": settings.SLACK_APPROVER_USER_ID},
+        )
+        dm_data = dm_resp.json()
+        dm_channel_id = dm_data.get("channel", {}).get("id")
+
+        if not dm_channel_id:
+            raise ValueError(f"Could not open DM with approver: {dm_data}")
+
+        # Send message to DM
         resp = await client.post(
             "https://slack.com/api/chat.postMessage",
             headers={"Authorization": f"Bearer {settings.SLACK_BOT_TOKEN}"},
             json={
-                "channel": settings.SLACK_APPROVAL_CHANNEL,
+                "channel": dm_channel_id,
                 "text": f"Neuer Entwurf fuer: {event.subject}",
                 "blocks": blocks,
             },

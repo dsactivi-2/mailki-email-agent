@@ -1,12 +1,19 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.base import get_db
 from app.db.models import EmailDraft, EmailEvent, Mailbox
 from app.services.agent import process_new_emails
-from app.services.gmail import fetch_new_emails
+from app.services.gmail import (
+    create_gmail_draft,
+    fetch_new_emails,
+    get_or_create_label,
+    set_label,
+)
 from app.services.slack import post_draft_for_approval
 
 logger = logging.getLogger(__name__)
@@ -116,7 +123,126 @@ async def _process_and_notify(db: Session):
     for draft in drafts:
         event = db.query(EmailEvent).filter_by(id=draft.email_event_id).first()
         if event:
+            mailbox_id = str(event.mailbox_id)
+
+            # Create Gmail draft and set label
+            try:
+                gmail_draft_id = create_gmail_draft(
+                    mailbox_id=mailbox_id,
+                    thread_id=event.thread_id,
+                    to=event.sender,
+                    subject=event.subject,
+                    body=draft.body_text,
+                )
+                draft.gmail_draft_id = gmail_draft_id
+                db.commit()
+            except Exception as e:
+                logger.error(f"Gmail draft creation failed: {e}")
+
+            try:
+                label_id = get_or_create_label(mailbox_id, "needs_approval")
+                set_label(mailbox_id, event.gmail_message_id, label_id)
+            except Exception as e:
+                logger.error(f"Label setting failed: {e}")
+
             try:
                 await post_draft_for_approval(draft, event)
             except Exception as e:
                 logger.error(f"Background notify error: {e}")
+
+
+class OperatorDraftRequest(BaseModel):
+    email_event_id: Optional[str] = None
+    thread_id: Optional[str] = None
+    instructions: Optional[str] = None
+
+
+@router.post("/operator/draft")
+async def operator_create_draft(
+    req: OperatorDraftRequest,
+    db: Session = Depends(get_db),
+):
+    """Operator command: create a draft for a specific email event or thread."""
+    event = None
+
+    if req.email_event_id:
+        event = db.query(EmailEvent).filter_by(id=req.email_event_id).first()
+    elif req.thread_id:
+        event = (
+            db.query(EmailEvent)
+            .filter_by(thread_id=req.thread_id)
+            .order_by(EmailEvent.received_at.desc())
+            .first()
+        )
+
+    if not event:
+        return {"ok": False, "error": "Email event not found"}
+
+    # Process using agent (re-process even if already processed)
+    from app.services.agent import (
+        _calculate_body_hash,
+        _check_compliance,
+        _check_vip,
+        _generate_ai_reply,
+    )
+    from app.db.models import KBCompliance, KBSignature, KBTone, KBVip
+
+    default_tone = db.query(KBTone).filter_by(is_default=True).first()
+    default_signature = db.query(KBSignature).filter_by(is_default=True).first()
+    compliance_rules = db.query(KBCompliance).filter_by(is_active=True).all()
+    compliance_flags = _check_compliance(event.body_text or "", compliance_rules)
+
+    tone_prompt = default_tone.prompt_template if default_tone else "Antworte professionell und freundlich auf Deutsch."
+    if req.instructions:
+        tone_prompt += f"\n\nZusaetzliche Anweisungen vom Operator:\n{req.instructions}"
+
+    signature_text = default_signature.content_text if default_signature else ""
+    draft_body = _generate_ai_reply(event, tone_prompt, signature_text, compliance_flags)
+
+    draft = EmailDraft(
+        email_event_id=event.id,
+        subject=event.subject,
+        body_text=draft_body,
+        body_hash=_calculate_body_hash(draft_body),
+        tone=default_tone.name if default_tone else "default",
+        status="pending_approval",
+        version=1,
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+
+    # Create Gmail draft
+    mailbox_id = str(event.mailbox_id)
+    try:
+        gmail_draft_id = create_gmail_draft(
+            mailbox_id=mailbox_id,
+            thread_id=event.thread_id,
+            to=event.sender,
+            subject=event.subject,
+            body=draft.body_text,
+        )
+        draft.gmail_draft_id = gmail_draft_id
+        db.commit()
+    except Exception as e:
+        logger.error(f"Gmail draft creation failed for operator draft: {e}")
+
+    # Set label
+    try:
+        label_id = get_or_create_label(mailbox_id, "needs_approval")
+        set_label(mailbox_id, event.gmail_message_id, label_id)
+    except Exception as e:
+        logger.error(f"Label setting failed for operator draft: {e}")
+
+    # Send Slack DM
+    try:
+        await post_draft_for_approval(draft, event)
+    except Exception as e:
+        logger.error(f"Slack DM failed for operator draft: {e}")
+
+    return {
+        "ok": True,
+        "draft_id": str(draft.id),
+        "subject": draft.subject,
+        "status": draft.status,
+    }

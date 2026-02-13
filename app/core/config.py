@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     SLACK_BOT_TOKEN: str = ""
     SLACK_SIGNING_SECRET: str = ""
     SLACK_APPROVAL_CHANNEL: str = "#mailki-approvals"
+    SLACK_APPROVER_USER_ID: str = "U0904E3AAR5"
 
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
