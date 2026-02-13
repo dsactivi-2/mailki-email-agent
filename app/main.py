@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from .api.auth import router as auth_router
 from .api.kb import router as kb_router
 from .api.logs import router as logs_router
+from .api.settings import router as settings_router
 from .api.routes import router as api_router
 from .api.slack_webhook import router as slack_router
 from .api.users import router as users_router
@@ -51,5 +52,6 @@ app.include_router(slack_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(kb_router, prefix="/api")
 app.include_router(logs_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

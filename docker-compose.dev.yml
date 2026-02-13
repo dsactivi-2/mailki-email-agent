@@ -23,3 +23,7 @@ services:
       - POSTGRES_USER=dev_user
       - POSTGRES_PASSWORD=dev_password
       - POSTGRES_DB=dev_db
+
+volumes:
+  db_data:
+  app_data:

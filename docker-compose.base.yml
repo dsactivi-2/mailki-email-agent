@@ -14,6 +14,17 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET}
+      - SLACK_APPROVAL_CHANNEL=${SLACK_APPROVAL_CHANNEL:-#mailki-approvals}
+      - SLACK_APPROVER_USER_ID=${SLACK_APPROVER_USER_ID}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
+    volumes:
+      - app_data:/app/data
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -30,3 +41,4 @@ services:
 
 volumes:
   db_data:
+  app_data:

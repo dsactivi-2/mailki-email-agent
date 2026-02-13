@@ -119,6 +119,7 @@
   <div class="nav-item" data-page="vips">VIPs</div>
   <div class="nav-item" data-page="compliance">Compliance</div>
   <div class="nav-section">System</div>
+  <div class="nav-item" data-page="settings">Einstellungen</div>
   <div class="nav-item" data-page="logs">Logs</div>
 </div>
 
@@ -142,7 +143,10 @@
   <div class="page" id="page-events">
     <div class="page-header">
       <h2>Eingehende E-Mails</h2>
-      <div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()"> Auto (30s)
+        </label>
         <button class="btn btn-outline btn-sm" onclick="api('/api/ingest','POST').then(()=>loadEvents())">Jetzt abrufen</button>
         <button class="refresh-btn" onclick="loadEvents()">&#x21bb;</button>
       </div>
@@ -173,7 +177,10 @@
   <div class="page" id="page-mailboxes">
     <div class="page-header">
       <h2>Postfaecher</h2>
-      <button class="refresh-btn" onclick="loadMailboxes()">&#x21bb;</button>
+      <div>
+        <button class="btn btn-primary btn-sm" onclick="openMailboxModal()">+ Neues Postfach</button>
+        <button class="refresh-btn" onclick="loadMailboxes()">&#x21bb;</button>
+      </div>
     </div>
     <div class="table-wrap">
       <table><thead><tr><th>E-Mail</th><th>Provider</th><th>Gmail verbunden</th><th>Letzter Sync</th><th>Aktion</th></tr></thead>
@@ -238,6 +245,58 @@
     <div class="table-wrap">
       <table><thead><tr><th>Regel</th><th>Beschreibung</th><th>Pattern</th><th>Aktion</th></tr></thead>
       <tbody id="compliance-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="page-settings">
+    <div class="page-header">
+      <h2>Einstellungen</h2>
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">Speichern</button>
+    </div>
+    <div style="display:grid;gap:20px;max-width:700px">
+
+      <div class="table-wrap" style="padding:20px">
+        <h3 style="margin-bottom:12px;font-size:15px">OpenAI</h3>
+        <div class="form-grid">
+          <div class="form-group"><label>API Key</label><input id="set-openai-key" type="password" placeholder="sk-..."></div>
+          <div class="form-group"><label>Modell</label>
+            <select id="set-openai-model">
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="gpt-4-turbo">gpt-4-turbo</option>
+              <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="padding:20px">
+        <h3 style="margin-bottom:12px;font-size:15px">Google OAuth</h3>
+        <div class="form-grid">
+          <div class="form-group"><label>Client ID</label><input id="set-google-id" placeholder="123...apps.googleusercontent.com"></div>
+          <div class="form-group"><label>Client Secret</label><input id="set-google-secret" type="password" placeholder="GOCSPX-..."></div>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="padding:20px">
+        <h3 style="margin-bottom:12px;font-size:15px">Slack</h3>
+        <div class="form-grid">
+          <div class="form-group"><label>Bot Token</label><input id="set-slack-token" type="password" placeholder="xoxb-..."></div>
+          <div class="form-group"><label>Signing Secret</label><input id="set-slack-secret" type="password" placeholder="7d3ecf..."></div>
+          <div class="form-group"><label>Approver User ID</label><input id="set-slack-user" placeholder="U0904E3AAR5"></div>
+          <div class="form-group"><label>Approval Channel</label><input id="set-slack-channel" placeholder="#mailki-approvals"></div>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="padding:20px">
+        <h3 style="margin-bottom:12px;font-size:15px">Allgemein</h3>
+        <div class="form-grid">
+          <div class="form-group"><label>Poll-Intervall (Minuten)</label><input id="set-poll-interval" type="number" min="1" max="60" placeholder="5"></div>
+        </div>
+      </div>
+
+      <p style="font-size:12px;color:var(--text-dim)">Hinweis: Aenderungen an API-Keys werden sofort aktiv. Bei Secrets wird der aktuelle Wert maskiert angezeigt — nur ueberschrieben wenn du einen neuen Wert eingibst.</p>
     </div>
   </div>
 
@@ -335,6 +394,25 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="mailbox-modal">
+  <div class="modal">
+    <h3>Neues Postfach</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Benutzer</label>
+        <select id="mb-user"><option value="">Wird geladen...</option></select>
+      </div>
+      <div class="form-group"><label>E-Mail Adresse</label><input id="mb-email" placeholder="info@firma.de"></div>
+      <div class="form-group"><label>Provider</label>
+        <select id="mb-provider"><option value="gmail">Gmail</option><option value="outlook">Outlook</option><option value="imap">IMAP</option></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('mailbox-modal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="createMailbox()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = '';
 
@@ -374,13 +452,40 @@ document.querySelectorAll('.nav-item').forEach(el => {
   });
 });
 
+let autoRefreshInterval = null;
+
 function loadPage(page) {
   const loaders = {
     dashboard: loadDashboard, events: loadEvents, drafts: loadDrafts,
     mailboxes: loadMailboxes, users: loadUsers, tones: loadTones,
-    signatures: loadSignatures, vips: loadVips, compliance: loadCompliance, logs: loadLogs
+    signatures: loadSignatures, vips: loadVips, compliance: loadCompliance,
+    settings: loadSettings, logs: loadLogs
   };
   if (loaders[page]) loaders[page]();
+
+  // Auto-refresh: start when on events page, stop otherwise
+  if (page === 'events') {
+    startAutoRefresh();
+  } else {
+    stopAutoRefresh();
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  const toggle = document.getElementById('auto-refresh-toggle');
+  if (toggle && toggle.checked) {
+    autoRefreshInterval = setInterval(() => loadEvents(), 30000);
+  }
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshInterval) { clearInterval(autoRefreshInterval); autoRefreshInterval = null; }
+}
+
+function toggleAutoRefresh() {
+  const toggle = document.getElementById('auto-refresh-toggle');
+  if (toggle.checked) { startAutoRefresh(); } else { stopAutoRefresh(); }
 }
 
 // Dashboard
@@ -542,6 +647,77 @@ async function createCompliance() {
   });
   closeModal('comp-modal');
   loadCompliance();
+}
+
+// Settings
+const SETTINGS_MAP = {
+  'OPENAI_API_KEY': 'set-openai-key',
+  'OPENAI_MODEL': 'set-openai-model',
+  'GOOGLE_CLIENT_ID': 'set-google-id',
+  'GOOGLE_CLIENT_SECRET': 'set-google-secret',
+  'SLACK_BOT_TOKEN': 'set-slack-token',
+  'SLACK_SIGNING_SECRET': 'set-slack-secret',
+  'SLACK_APPROVER_USER_ID': 'set-slack-user',
+  'SLACK_APPROVAL_CHANNEL': 'set-slack-channel',
+  'POLL_INTERVAL_MINUTES': 'set-poll-interval',
+};
+
+async function loadSettings() {
+  const data = await api('/api/settings');
+  for (const [key, elId] of Object.entries(SETTINGS_MAP)) {
+    const el = document.getElementById(elId);
+    if (!el || !data[key]) continue;
+    if (el.type === 'password') {
+      el.value = '';
+      el.placeholder = data[key].is_set ? data[key].value : 'Nicht gesetzt';
+    } else {
+      el.value = data[key].value;
+    }
+  }
+}
+
+async function saveSettings() {
+  const values = {};
+  for (const [key, elId] of Object.entries(SETTINGS_MAP)) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    const val = el.value.trim();
+    if (el.type === 'password' && !val) continue;  // Don't send empty passwords
+    if (val) values[key] = val;
+  }
+  const result = await api('/api/settings', 'PUT', { settings: values });
+  if (result.updated && result.updated.length > 0) {
+    alert('Gespeichert: ' + result.updated.join(', '));
+  } else {
+    alert('Keine Aenderungen');
+  }
+  loadSettings();
+}
+
+// Mailbox creation
+async function openMailboxModal() {
+  const users = await api('/api/users');
+  const sel = document.getElementById('mb-user');
+  sel.innerHTML = users.map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`).join('');
+  if (users.length === 0) sel.innerHTML = '<option value="">Keine Benutzer vorhanden</option>';
+  document.getElementById('mb-email').value = '';
+  openModal('mailbox-modal');
+}
+
+async function createMailbox() {
+  const userId = document.getElementById('mb-user').value;
+  const email = document.getElementById('mb-email').value;
+  const provider = document.getElementById('mb-provider').value;
+  if (!userId || !email) { alert('Bitte Benutzer und E-Mail angeben'); return; }
+  try {
+    const result = await api(`/api/users/${userId}/mailboxes`, 'POST', { email_address: email, provider: provider });
+    if (result.id) {
+      closeModal('mailbox-modal');
+      loadMailboxes();
+    } else {
+      alert('Fehler: ' + (result.detail || JSON.stringify(result)));
+    }
+  } catch(e) { alert('Fehler: ' + e.message); }
 }
 
 // Modal helpers
