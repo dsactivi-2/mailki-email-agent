@@ -40,11 +40,12 @@ def _get_flow(redirect_uri: str) -> Flow:
     return Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
 
 
-def get_auth_url(redirect_uri: str) -> str:
+def get_auth_url(redirect_uri: str, state: str = None) -> str:
     flow = _get_flow(redirect_uri)
-    auth_url, _ = flow.authorization_url(
-        access_type="offline", include_granted_scopes="true", prompt="consent"
-    )
+    kwargs = dict(access_type="offline", include_granted_scopes="true", prompt="consent")
+    if state:
+        kwargs["state"] = state
+    auth_url, _ = flow.authorization_url(**kwargs)
     return auth_url
 
 

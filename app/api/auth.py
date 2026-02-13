@@ -18,8 +18,8 @@ def _redirect_uri(request: Request) -> str:
 @router.get("/auth/google")
 def google_login(request: Request, mailbox_id: str = Query(...)):
     redirect_uri = _redirect_uri(request)
-    auth_url = get_auth_url(redirect_uri)
-    return RedirectResponse(auth_url + f"&state={mailbox_id}")
+    auth_url = get_auth_url(redirect_uri, state=mailbox_id)
+    return RedirectResponse(auth_url)
 
 
 @router.get("/auth/google/callback")
