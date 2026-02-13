@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  app:
+    extends:
+      file: docker-compose.base.yml
+      service: app
+    environment:
+      - ENVIRONMENT=dev
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=dev_user
+      - DB_PASSWORD=dev_password
+      - DB_NAME=dev_db
+    ports:
+      - "8001:8000"
+
+  db:
+    extends:
+      file: docker-compose.base.yml
+      service: db
+    environment:
+      - POSTGRES_USER=dev_user
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=dev_db
