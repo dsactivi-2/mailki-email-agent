@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -9,8 +9,13 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = "dev_password"
     DB_NAME: str = "dev_db"
 
-    class Config:
-        env_file = ".env"
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    SLACK_BOT_TOKEN: str = ""
+    SLACK_SIGNING_SECRET: str = ""
+    SLACK_APPROVAL_CHANNEL: str = "#mailki-approvals"
+
+    model_config = {"env_file": ".env"}
 
 
 settings = Settings()
