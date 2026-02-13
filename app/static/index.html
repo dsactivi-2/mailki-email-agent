@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mailki Email Agent</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #334155;
+    --border: #475569;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --orange: #f97316;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; }
+  .sidebar h1 { font-size: 18px; padding: 0 20px 20px; border-bottom: 1px solid var(--border); }
+  .sidebar h1 span { color: var(--accent); }
+  .nav-item { display: block; padding: 12px 20px; color: var(--text-dim); cursor: pointer; transition: all 0.15s; font-size: 14px; border-left: 3px solid transparent; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(59,130,246,0.1); }
+  .nav-section { font-size: 11px; text-transform: uppercase; color: var(--text-dim); padding: 20px 20px 8px; letter-spacing: 0.5px; }
+
+  .main { margin-left: 220px; padding: 24px 32px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Header */
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .page-header h2 { font-size: 22px; font-weight: 600; }
+
+  /* Cards */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .stat-card .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.blue { color: var(--accent); }
+  .stat-card .value.yellow { color: var(--yellow); }
+  .stat-card .value.red { color: var(--red); }
+
+  /* Tables */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 12px 16px; font-size: 12px; text-transform: uppercase; color: var(--text-dim); background: var(--surface2); letter-spacing: 0.5px; }
+  td { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 14px; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-gray { background: rgba(148,163,184,0.15); color: var(--text-dim); }
+  .badge-orange { background: rgba(249,115,22,0.15); color: var(--orange); }
+
+  /* Buttons */
+  .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { background: var(--surface2); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+  /* Forms */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-group label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; }
+  .form-group input, .form-group textarea, .form-group select { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit; }
+  .form-group textarea { resize: vertical; min-height: 80px; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 500px; max-width: 90vw; max-height: 80vh; overflow-y: auto; }
+  .modal h3 { margin-bottom: 16px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  /* Misc */
+  .empty { text-align: center; padding: 40px; color: var(--text-dim); }
+  .refresh-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; }
+  .refresh-btn:hover { color: var(--text); }
+  .truncate { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: var(--text-dim); }
+  .log-line { padding: 6px 16px; font-family: monospace; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .log-line:nth-child(odd) { background: rgba(255,255,255,0.01); }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.on { background: var(--green); }
+  .status-dot.off { background: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <h1><span>Mailki</span> Agent</h1>
+  <div class="nav-section">Uebersicht</div>
+  <div class="nav-item active" data-page="dashboard">Dashboard</div>
+  <div class="nav-section">E-Mail</div>
+  <div class="nav-item" data-page="events">Eingehende E-Mails</div>
+  <div class="nav-item" data-page="drafts">Entwuerfe</div>
+  <div class="nav-section">Verwaltung</div>
+  <div class="nav-item" data-page="mailboxes">Postfaecher</div>
+  <div class="nav-item" data-page="users">Benutzer</div>
+  <div class="nav-section">Knowledge Base</div>
+  <div class="nav-item" data-page="tones">Tone / Stil</div>
+  <div class="nav-item" data-page="signatures">Signaturen</div>
+  <div class="nav-item" data-page="vips">VIPs</div>
+  <div class="nav-item" data-page="compliance">Compliance</div>
+  <div class="nav-section">System</div>
+  <div class="nav-item" data-page="logs">Logs</div>
+</div>
+
+<div class="main">
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <h2>Dashboard</h2>
+      <button class="refresh-btn" onclick="loadDashboard()">&#x21bb;</button>
+    </div>
+    <div class="stats" id="dashboard-stats"></div>
+    <h3 style="margin-bottom:12px">Letzte Entwuerfe</h3>
+    <div class="table-wrap">
+      <table><thead><tr><th>Betreff</th><th>Status</th><th>Ton</th><th>Erstellt</th></tr></thead>
+      <tbody id="dashboard-drafts"></tbody></table>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div class="page" id="page-events">
+    <div class="page-header">
+      <h2>Eingehende E-Mails</h2>
+      <div>
+        <button class="btn btn-outline btn-sm" onclick="api('/api/ingest','POST').then(()=>loadEvents())">Jetzt abrufen</button>
+        <button class="refresh-btn" onclick="loadEvents()">&#x21bb;</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Absender</th><th>Betreff</th><th>Prioritaet</th><th>Verarbeitet</th><th>Empfangen</th></tr></thead>
+      <tbody id="events-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- DRAFTS -->
+  <div class="page" id="page-drafts">
+    <div class="page-header">
+      <h2>Entwuerfe</h2>
+      <div>
+        <button class="btn btn-outline btn-sm" onclick="api('/api/process','POST').then(()=>loadDrafts())">Neue erstellen</button>
+        <button class="btn btn-outline btn-sm" onclick="api('/api/notify','POST').then(()=>loadDrafts())">An Slack senden</button>
+        <button class="refresh-btn" onclick="loadDrafts()">&#x21bb;</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Betreff</th><th>Status</th><th>Ton</th><th>Erstellt</th></tr></thead>
+      <tbody id="drafts-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- MAILBOXES -->
+  <div class="page" id="page-mailboxes">
+    <div class="page-header">
+      <h2>Postfaecher</h2>
+      <button class="refresh-btn" onclick="loadMailboxes()">&#x21bb;</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>E-Mail</th><th>Provider</th><th>Gmail verbunden</th><th>Letzter Sync</th><th>Aktion</th></tr></thead>
+      <tbody id="mailboxes-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- USERS -->
+  <div class="page" id="page-users">
+    <div class="page-header">
+      <h2>Benutzer</h2>
+      <button class="btn btn-primary btn-sm" onclick="openModal('user-modal')">+ Neuer Benutzer</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Erstellt</th></tr></thead>
+      <tbody id="users-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- TONES -->
+  <div class="page" id="page-tones">
+    <div class="page-header">
+      <h2>Tone / Stil</h2>
+      <button class="btn btn-primary btn-sm" onclick="openModal('tone-modal')">+ Neuer Ton</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Name</th><th>Beschreibung</th><th>Standard</th></tr></thead>
+      <tbody id="tones-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- SIGNATURES -->
+  <div class="page" id="page-signatures">
+    <div class="page-header">
+      <h2>Signaturen</h2>
+      <button class="btn btn-primary btn-sm" onclick="openModal('sig-modal')">+ Neue Signatur</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Name</th><th>Sprache</th><th>Standard</th></tr></thead>
+      <tbody id="signatures-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- VIPS -->
+  <div class="page" id="page-vips">
+    <div class="page-header">
+      <h2>VIPs</h2>
+      <button class="btn btn-primary btn-sm" onclick="openModal('vip-modal')">+ Neuer VIP</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>E-Mail Pattern</th><th>Name</th><th>Prioritaet</th><th>Anweisungen</th></tr></thead>
+      <tbody id="vips-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- COMPLIANCE -->
+  <div class="page" id="page-compliance">
+    <div class="page-header">
+      <h2>Compliance Regeln</h2>
+      <button class="btn btn-primary btn-sm" onclick="openModal('comp-modal')">+ Neue Regel</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Regel</th><th>Beschreibung</th><th>Pattern</th><th>Aktion</th></tr></thead>
+      <tbody id="compliance-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- LOGS -->
+  <div class="page" id="page-logs">
+    <div class="page-header">
+      <h2>System Logs</h2>
+      <button class="refresh-btn" onclick="loadLogs()">&#x21bb;</button>
+    </div>
+    <div class="table-wrap" id="logs-container" style="max-height:600px;overflow-y:auto"></div>
+  </div>
+
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal">
+    <h3>Neuer Benutzer</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Name</label><input id="u-name" placeholder="Max Mustermann"></div>
+      <div class="form-group"><label>E-Mail</label><input id="u-email" placeholder="max@firma.de"></div>
+      <div class="form-group"><label>Rolle</label>
+        <select id="u-role"><option value="agent">Agent</option><option value="admin">Admin</option><option value="reviewer">Reviewer</option></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('user-modal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="createUser()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="tone-modal">
+  <div class="modal">
+    <h3>Neuer Ton</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Name</label><input id="t-name" placeholder="Formell"></div>
+      <div class="form-group"><label>Beschreibung</label><input id="t-desc" placeholder="Formeller Geschaeftston"></div>
+      <div class="form-group full"><label>Prompt Template</label><textarea id="t-prompt" placeholder="Antworte formell und hoeflich..."></textarea></div>
+      <div class="form-group"><label>Standard?</label><select id="t-default"><option value="false">Nein</option><option value="true">Ja</option></select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('tone-modal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="createTone()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sig-modal">
+  <div class="modal">
+    <h3>Neue Signatur</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Name</label><input id="s-name" placeholder="Standard DE"></div>
+      <div class="form-group"><label>Sprache</label><select id="s-lang"><option value="de">Deutsch</option><option value="en">English</option></select></div>
+      <div class="form-group full"><label>Text-Inhalt</label><textarea id="s-text" placeholder="Mit freundlichen Gruessen..."></textarea></div>
+      <div class="form-group full"><label>HTML-Inhalt</label><textarea id="s-html" placeholder="<p>Mit freundlichen Gruessen...</p>"></textarea></div>
+      <div class="form-group"><label>Standard?</label><select id="s-default"><option value="false">Nein</option><option value="true">Ja</option></select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('sig-modal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="createSignature()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="vip-modal">
+  <div class="modal">
+    <h3>Neuer VIP</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>E-Mail Pattern</label><input id="v-pattern" placeholder="ceo@wichtig.de"></div>
+      <div class="form-group"><label>Name</label><input id="v-name" placeholder="CEO Wichtig GmbH"></div>
+      <div class="form-group"><label>Prioritaet</label><select id="v-prio"><option value="high">High</option><option value="critical">Critical</option><option value="normal">Normal</option></select></div>
+      <div class="form-group full"><label>Spezielle Anweisungen</label><textarea id="v-instr" placeholder="Immer sofort antworten..."></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('vip-modal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="createVip()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="comp-modal">
+  <div class="modal">
+    <h3>Neue Compliance Regel</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Regelname</label><input id="c-name" placeholder="DSGVO Warnung"></div>
+      <div class="form-group"><label>Aktion</label><select id="c-action"><option value="flag">Flag</option><option value="block">Block</option><option value="warn">Warn</option></select></div>
+      <div class="form-group full"><label>Beschreibung</label><input id="c-desc" placeholder="Warnung bei personenbezogenen Daten"></div>
+      <div class="form-group full"><label>Regex Pattern</label><input id="c-pattern" placeholder="(IBAN|Steuer-?Nr|Sozialversicherung)"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('comp-modal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="createCompliance()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+async function api(path, method='GET', body=null) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API + path, opts);
+  return r.json();
+}
+
+function statusBadge(s) {
+  const m = {
+    'sent': 'badge-green', 'approved': 'badge-green', 'pending_approval': 'badge-yellow',
+    'draft': 'badge-blue', 'rejected': 'badge-red', 'edit_requested': 'badge-orange'
+  };
+  return `<span class="badge ${m[s]||'badge-gray'}">${s}</span>`;
+}
+
+function prioBadge(p) {
+  const m = { 'critical': 'badge-red', 'high': 'badge-orange', 'normal': 'badge-blue', 'low': 'badge-gray' };
+  return `<span class="badge ${m[p]||'badge-gray'}">${p}</span>`;
+}
+
+function fmtDate(d) {
+  if (!d) return '-';
+  return new Date(d).toLocaleString('de-DE', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+// Navigation
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('page-' + el.dataset.page).classList.add('active');
+    loadPage(el.dataset.page);
+  });
+});
+
+function loadPage(page) {
+  const loaders = {
+    dashboard: loadDashboard, events: loadEvents, drafts: loadDrafts,
+    mailboxes: loadMailboxes, users: loadUsers, tones: loadTones,
+    signatures: loadSignatures, vips: loadVips, compliance: loadCompliance, logs: loadLogs
+  };
+  if (loaders[page]) loaders[page]();
+}
+
+// Dashboard
+async function loadDashboard() {
+  const [events, drafts, mailboxes, users] = await Promise.all([
+    api('/api/events'), api('/api/drafts'), api('/api/mailboxes'), api('/api/users')
+  ]);
+  const pending = drafts.filter(d => d.status === 'pending_approval').length;
+  const sent = drafts.filter(d => d.status === 'sent').length;
+
+  document.getElementById('dashboard-stats').innerHTML = `
+    <div class="stat-card"><div class="label">E-Mails</div><div class="value blue">${events.length}</div></div>
+    <div class="stat-card"><div class="label">Entwuerfe</div><div class="value">${drafts.length}</div></div>
+    <div class="stat-card"><div class="label">Warten auf Freigabe</div><div class="value yellow">${pending}</div></div>
+    <div class="stat-card"><div class="label">Gesendet</div><div class="value green">${sent}</div></div>
+    <div class="stat-card"><div class="label">Postfaecher</div><div class="value">${mailboxes.length}</div></div>
+    <div class="stat-card"><div class="label">Benutzer</div><div class="value">${users.length}</div></div>
+  `;
+  document.getElementById('dashboard-drafts').innerHTML = drafts.slice(0,10).map(d => `
+    <tr><td class="truncate">${d.subject||'-'}</td><td>${statusBadge(d.status)}</td><td>${d.tone||'-'}</td><td class="mono">${fmtDate(d.created_at)}</td></tr>
+  `).join('') || '<tr><td colspan="4" class="empty">Keine Entwuerfe</td></tr>';
+}
+
+// Events
+async function loadEvents() {
+  const data = await api('/api/events');
+  document.getElementById('events-table').innerHTML = data.map(e => `
+    <tr><td>${e.sender}</td><td class="truncate">${e.subject||'-'}</td><td>${prioBadge(e.priority)}</td>
+    <td>${e.is_processed ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-yellow">Nein</span>'}</td>
+    <td class="mono">${fmtDate(e.received_at)}</td></tr>
+  `).join('') || '<tr><td colspan="5" class="empty">Keine E-Mails. Klicke "Jetzt abrufen".</td></tr>';
+}
+
+// Drafts
+async function loadDrafts() {
+  const data = await api('/api/drafts');
+  document.getElementById('drafts-table').innerHTML = data.map(d => `
+    <tr><td class="truncate">${d.subject||'-'}</td><td>${statusBadge(d.status)}</td><td>${d.tone||'-'}</td><td class="mono">${fmtDate(d.created_at)}</td></tr>
+  `).join('') || '<tr><td colspan="4" class="empty">Keine Entwuerfe</td></tr>';
+}
+
+// Mailboxes
+async function loadMailboxes() {
+  const data = await api('/api/mailboxes');
+  document.getElementById('mailboxes-table').innerHTML = data.map(m => `
+    <tr><td>${m.email_address}</td><td>${m.provider}</td>
+    <td><span class="status-dot ${m.has_credentials?'on':'off'}"></span>${m.has_credentials?'Ja':'Nein'}</td>
+    <td class="mono">${fmtDate(m.last_sync_at)}</td>
+    <td>${!m.has_credentials ? `<a class="btn btn-primary btn-sm" href="/api/auth/google?mailbox_id=${m.id}">Gmail verbinden</a>` : '<span class="badge badge-green">Verbunden</span>'}</td></tr>
+  `).join('') || '<tr><td colspan="5" class="empty">Keine Postfaecher</td></tr>';
+}
+
+// Users
+async function loadUsers() {
+  const data = await api('/api/users');
+  document.getElementById('users-table').innerHTML = data.map(u => `
+    <tr><td>${u.name}</td><td>${u.email}</td><td><span class="badge badge-blue">${u.role}</span></td><td class="mono">${fmtDate(u.created_at)}</td></tr>
+  `).join('') || '<tr><td colspan="4" class="empty">Keine Benutzer</td></tr>';
+}
+
+// KB: Tones
+async function loadTones() {
+  const data = await api('/api/kb/tones');
+  document.getElementById('tones-table').innerHTML = data.map(t => `
+    <tr><td>${t.name}</td><td>${t.description||'-'}</td><td>${t.is_default?'<span class="badge badge-green">Ja</span>':'-'}</td></tr>
+  `).join('') || '<tr><td colspan="3" class="empty">Keine Tones definiert</td></tr>';
+}
+
+async function loadSignatures() {
+  const data = await api('/api/kb/signatures');
+  document.getElementById('signatures-table').innerHTML = data.map(s => `
+    <tr><td>${s.name}</td><td>${s.language}</td><td>${s.is_default?'<span class="badge badge-green">Ja</span>':'-'}</td></tr>
+  `).join('') || '<tr><td colspan="3" class="empty">Keine Signaturen definiert</td></tr>';
+}
+
+async function loadVips() {
+  const data = await api('/api/kb/vips');
+  document.getElementById('vips-table').innerHTML = data.map(v => `
+    <tr><td class="mono">${v.email_pattern}</td><td>${v.name||'-'}</td><td>${prioBadge(v.priority)}</td><td class="truncate">${v.special_instructions||'-'}</td></tr>
+  `).join('') || '<tr><td colspan="4" class="empty">Keine VIPs definiert</td></tr>';
+}
+
+async function loadCompliance() {
+  const data = await api('/api/kb/compliance');
+  document.getElementById('compliance-table').innerHTML = data.map(c => `
+    <tr><td>${c.rule_name}</td><td class="truncate">${c.description||'-'}</td><td class="mono">${c.pattern||'-'}</td><td><span class="badge badge-orange">${c.action}</span></td></tr>
+  `).join('') || '<tr><td colspan="4" class="empty">Keine Regeln definiert</td></tr>';
+}
+
+// Logs
+async function loadLogs() {
+  document.getElementById('logs-container').innerHTML = '<div class="empty">Logs werden geladen...</div>';
+  try {
+    const r = await fetch('/api/logs');
+    if (r.ok) {
+      const data = await r.json();
+      document.getElementById('logs-container').innerHTML = data.map(l =>
+        `<div class="log-line">${l}</div>`
+      ).join('') || '<div class="empty">Keine Logs</div>';
+    } else {
+      document.getElementById('logs-container').innerHTML = '<div class="empty">Log-Endpoint nicht verfuegbar. Nutze: docker compose logs app</div>';
+    }
+  } catch(e) {
+    document.getElementById('logs-container').innerHTML = '<div class="empty">Log-Endpoint nicht verfuegbar. Nutze: docker compose logs app</div>';
+  }
+}
+
+// Create functions
+async function createUser() {
+  await api('/api/users', 'POST', {
+    name: document.getElementById('u-name').value,
+    email: document.getElementById('u-email').value,
+    role: document.getElementById('u-role').value,
+  });
+  closeModal('user-modal');
+  loadUsers();
+}
+
+async function createTone() {
+  await api('/api/kb/tones', 'POST', {
+    name: document.getElementById('t-name').value,
+    description: document.getElementById('t-desc').value,
+    prompt_template: document.getElementById('t-prompt').value,
+    is_default: document.getElementById('t-default').value === 'true',
+  });
+  closeModal('tone-modal');
+  loadTones();
+}
+
+async function createSignature() {
+  await api('/api/kb/signatures', 'POST', {
+    name: document.getElementById('s-name').value,
+    content_text: document.getElementById('s-text').value,
+    content_html: document.getElementById('s-html').value || document.getElementById('s-text').value,
+    language: document.getElementById('s-lang').value,
+    is_default: document.getElementById('s-default').value === 'true',
+  });
+  closeModal('sig-modal');
+  loadSignatures();
+}
+
+async function createVip() {
+  await api('/api/kb/vips', 'POST', {
+    email_pattern: document.getElementById('v-pattern').value,
+    name: document.getElementById('v-name').value,
+    priority: document.getElementById('v-prio').value,
+    special_instructions: document.getElementById('v-instr').value,
+  });
+  closeModal('vip-modal');
+  loadVips();
+}
+
+async function createCompliance() {
+  await api('/api/kb/compliance', 'POST', {
+    rule_name: document.getElementById('c-name').value,
+    description: document.getElementById('c-desc').value,
+    pattern: document.getElementById('c-pattern').value,
+    action: document.getElementById('c-action').value,
+  });
+  closeModal('comp-modal');
+  loadCompliance();
+}
+
+// Modal helpers
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
+});
+
+// Initial load
+loadDashboard();
+</script>
+</body>
+</html>
