@@ -10,9 +10,14 @@ router = APIRouter()
 
 
 def _redirect_uri(request: Request) -> str:
-    """Build callback URI using 127.0.0.1 instead of localhost for Google OAuth."""
+    """Build callback URI, respecting X-Forwarded-Proto from reverse proxy."""
     url = str(request.url_for("google_callback"))
-    return url.replace("://localhost", "://127.0.0.1")
+    url = url.replace("://localhost", "://127.0.0.1")
+    # Behind Traefik/reverse proxy: force https if X-Forwarded-Proto says so
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto == "https" and url.startswith("http://"):
+        url = "https://" + url[7:]
+    return url
 
 
 @router.get("/auth/google")

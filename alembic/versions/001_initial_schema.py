@@ -64,11 +64,11 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
     )
 
-    # Draft status enum
+    # Draft status enum — create_type=False because we create manually first
     draft_status = postgresql.ENUM(
         "draft", "pending_approval", "approved", "rejected", "sent",
         name="draft_status",
-        create_type=True,
+        create_type=False,
     )
     draft_status.create(op.get_bind(), checkfirst=True)
 
@@ -89,11 +89,11 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now()),
     )
 
-    # Approval action enum
+    # Approval action enum — create_type=False because we create manually first
     approval_action_type = postgresql.ENUM(
         "approved", "rejected", "edit_requested",
         name="approval_action_type",
-        create_type=True,
+        create_type=False,
     )
     approval_action_type.create(op.get_bind(), checkfirst=True)
 
