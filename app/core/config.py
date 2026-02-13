@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     SLACK_SIGNING_SECRET: str = ""
     SLACK_APPROVAL_CHANNEL: str = "#mailki-approvals"
 
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    POLL_INTERVAL_MINUTES: int = 5
+
     model_config = {"env_file": ".env"}
 
 
