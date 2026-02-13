@@ -429,7 +429,7 @@ async function loadMailboxes() {
     <tr><td>${m.email_address}</td><td>${m.provider}</td>
     <td><span class="status-dot ${m.has_credentials?'on':'off'}"></span>${m.has_credentials?'Ja':'Nein'}</td>
     <td class="mono">${fmtDate(m.last_sync_at)}</td>
-    <td>${!m.has_credentials ? `<a class="btn btn-primary btn-sm" href="/api/auth/google?mailbox_id=${m.id}">Gmail verbinden</a>` : '<span class="badge badge-green">Verbunden</span>'}</td></tr>
+    <td>${!m.has_credentials ? `<a class="btn btn-primary btn-sm" href="http://127.0.0.1:${location.port}/api/auth/google?mailbox_id=${m.id}">Gmail verbinden</a>` : '<span class="badge badge-green">Verbunden</span>'}</td></tr>
   `).join('') || '<tr><td colspan="5" class="empty">Keine Postfaecher</td></tr>';
 }
 
@@ -474,17 +474,17 @@ async function loadCompliance() {
 async function loadLogs() {
   document.getElementById('logs-container').innerHTML = '<div class="empty">Logs werden geladen...</div>';
   try {
-    const r = await fetch('/api/logs');
-    if (r.ok) {
-      const data = await r.json();
-      document.getElementById('logs-container').innerHTML = data.map(l =>
-        `<div class="log-line">${l}</div>`
-      ).join('') || '<div class="empty">Keine Logs</div>';
+    const data = await api('/api/logs?limit=200');
+    if (Array.isArray(data) && data.length > 0) {
+      document.getElementById('logs-container').innerHTML = data.map(l => {
+        const lvlClass = l.level === 'ERROR' ? 'color:var(--red)' : l.level === 'WARNING' ? 'color:var(--yellow)' : '';
+        return `<div class="log-line"><span class="mono" style="color:var(--text-dim)">${l.ts}</span> <span style="${lvlClass};font-weight:600">[${l.level}]</span> <span style="color:var(--accent)">${l.logger}</span>: ${l.message}</div>`;
+      }).join('');
     } else {
-      document.getElementById('logs-container').innerHTML = '<div class="empty">Log-Endpoint nicht verfuegbar. Nutze: docker compose logs app</div>';
+      document.getElementById('logs-container').innerHTML = '<div class="empty">Keine Logs vorhanden</div>';
     }
   } catch(e) {
-    document.getElementById('logs-container').innerHTML = '<div class="empty">Log-Endpoint nicht verfuegbar. Nutze: docker compose logs app</div>';
+    document.getElementById('logs-container').innerHTML = '<div class="empty">Fehler beim Laden der Logs</div>';
   }
 }
 

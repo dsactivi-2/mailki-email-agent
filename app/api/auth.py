@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db.base import get_db
@@ -9,14 +10,16 @@ router = APIRouter()
 
 
 def _redirect_uri(request: Request) -> str:
-    return str(request.url_for("google_callback"))
+    """Build callback URI using 127.0.0.1 instead of localhost for Google OAuth."""
+    url = str(request.url_for("google_callback"))
+    return url.replace("://localhost", "://127.0.0.1")
 
 
 @router.get("/auth/google")
 def google_login(request: Request, mailbox_id: str = Query(...)):
     redirect_uri = _redirect_uri(request)
     auth_url = get_auth_url(redirect_uri)
-    return {"auth_url": auth_url + f"&state={mailbox_id}"}
+    return RedirectResponse(auth_url + f"&state={mailbox_id}")
 
 
 @router.get("/auth/google/callback")
@@ -35,4 +38,4 @@ def google_callback(
         mailbox.credentials_ref = f"token://{mailbox_id}"
         db.commit()
 
-    return {"status": "ok", "message": "Gmail connected", "mailbox_id": mailbox_id}
+    return RedirectResponse("/?connected=1")
